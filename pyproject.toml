@@ -1,0 +1,69 @@
+[project]
+name = "nanobot-channel-dingtalk"
+version = "0.1.0"
+description = "DingTalk channel plugin for nanobot with AI Card streaming and rich media support"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [
+    { name = "nanobot-channel-dingtalk contributors" },
+]
+keywords = ["nanobot", "dingtalk", "channel", "ai-card", "streaming"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Communications :: Chat",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+dependencies = [
+    "nanobot-ai>=0.1.5",
+    "dingtalk-stream>=0.24.0",
+    "httpx>=0.24.0",
+    "pydantic>=2.0",
+    "loguru",
+]
+
+[project.optional-dependencies]
+docs = [
+    "python-docx>=1.1.0",
+    "pypdf>=4.0",
+]
+all = ["nanobot-channel-dingtalk[docs]"]
+
+[project.entry-points."nanobot.channels"]
+nano_dingtalk = "nanobot_channel_dingtalk:DingTalkChannel"
+
+[project.urls]
+Homepage = "https://github.com/codeLong1024/nanobot_channel_dingtalk"
+Source = "https://github.com/codeLong1024/nanobot_channel_dingtalk"
+BugTracker = "https://github.com/codeLong1024/nanobot_channel_dingtalk/issues"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/nanobot_channel_dingtalk"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+src = ["src"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+pythonpath = ["src"]
+markers = [
+    "integration: 端到端集成测试（需要真实钉钉凭证）",
+]
