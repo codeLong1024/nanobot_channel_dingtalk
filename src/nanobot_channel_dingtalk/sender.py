@@ -6,12 +6,14 @@ This module handles:
 - Media upload to DingTalk
 - Remote media fetching with SSRF protection
 - File download from DingTalk
+- AI Card streaming (typing effect via /card/streaming)
 """
 
 from __future__ import annotations
 
 import json
 import mimetypes
+from collections import OrderedDict
 from pathlib import Path
 from typing import Any, Awaitable, Callable
 
@@ -46,18 +48,30 @@ class DingTalkSender:
     - :mod:`.media.download` for file download from DingTalk
     - :mod:`.media.upload` for media upload to DingTalk
     - :mod:`.token` for access token management
+
+    Streaming (AI Card):
+    - Manages AI Card lifecycle for agent streaming output
+    - 5-path send: streaming delta / streaming end / progress skip /
+      non-streaming w/ card / markdown fallback
     """
+
+    # Cap for _streamed_chats to prevent unbounded memory growth
+    _STREAMED_CHAT_MAX = 5000
 
     def __init__(
         self,
         config: Any,
         logger: Any,
         http_client: httpx.AsyncClient | None = None,
+        card_manager: Any = None,
+        pending_cards: dict[str, str] | None = None,
         token_provider: Callable[[], Awaitable[str | None]] | None = None,
     ):
         self.config = config
         self.logger = logger
         self._http = http_client
+        self._card_manager = card_manager
+        self._pending_cards = pending_cards if pending_cards is not None else {}
         self._token_manager = TokenManager(
             client_id=config.client_id,
             client_secret=config.client_secret,
@@ -66,10 +80,16 @@ class DingTalkSender:
             token_provider=token_provider,
         )
 
-    def setup(self, http_client: httpx.AsyncClient) -> None:
-        """Configure HTTP client after construction."""
+        # Streaming state per chat_id
+        self._streaming_buffers: dict[str, str] = {}  # chat_id → accumulated content
+        self._streamed_chats: OrderedDict[str, bool] = OrderedDict()  # LRU, bounded
+
+    def setup(self, http_client: httpx.AsyncClient, card_manager: Any = None) -> None:
+        """Configure HTTP client and card manager after construction."""
         self._http = http_client
         self._token_manager.http = http_client
+        if card_manager is not None:
+            self._card_manager = card_manager
 
     async def read_media_bytes(self, media_ref: str, **kwargs: Any) -> tuple[bytes | None, str | None, str | None]:
         """Read media bytes from URL or local file. Delegates to :func:`media.fetch.read_media_bytes`."""
@@ -302,49 +322,154 @@ class DingTalkSender:
     async def send(self, msg: Any) -> None:
         """Send an outbound message.
 
-        Media pipeline (applied to content before sending):
+        Five paths:
+        1. **Streaming delta** (``_stream_delta``): accumulate content
+           and push to AI Card via ``card_manager.stream_content()`` — typing effect.
+        2. **Streaming end** (``_stream_end``, no resume): final push + ``finish_streaming()``.
+        3. **Progress/status messages** (``_progress``, ``_retry_wait``): silently
+           skipped when a card is pending — they must NOT pop the card.
+        4. **Non-streaming with card**: pop and finalize/fail the card.
+        5. **Non-streaming without card**: fallback to markdown (and optional media).
+
+        **Media pipeline** (applied to non-streaming content before sending):
         1. ``process_local_images()``      — replace Markdown image paths
         2. ``process_bare_image_paths()``  — handle bare image paths
         3. ``process_video_markers()``     — process [DINGTALK_VIDEO]
         4. ``process_audio_markers()``     — process [DINGTALK_AUDIO]
         5. ``upload_and_replace_file_markers()`` — process [DINGTALK_FILE]
         6. ``process_raw_media_paths()``   — handle remaining bare paths (safety net)
-        7. Send cleaned text via markdown
+        7. Send cleaned text via card/markdown
         8. Send media references via native DingTalk API
         """
         token = await self.get_access_token()
         if not token:
             return
 
+        metadata = msg.metadata or {}
         chat_id = msg.chat_id
+        card_id = self._pending_cards.get(chat_id) if self._pending_cards else None
 
         # ============ Rich media preprocessing pipeline ============
+        # Apply to non-streaming, final content only
         content = msg.content or ""
-        if content and self.config.enable_marker_processing:
+        if (
+            not metadata.get("_stream_delta")
+            and content
+            and self.config.enable_marker_processing
+        ):
             try:
+                # 1. Process Markdown images
                 content = await process_local_images(content, self, token, self.logger)
+
+                # 2. Process bare image paths
                 content = await process_bare_image_paths(content, self, token, self.logger)
+
+                # 3. Process video markers
                 content = await process_video_markers(
                     content, self._http, token, self, chat_id, self.logger,
                 )
+
+                # 4. Process audio markers
                 content = await process_audio_markers(
                     content, self._http, token, self, chat_id, self.logger,
                 )
+
+                # 5. Process file markers
                 content = await upload_and_replace_file_markers(
                     content, self, token, self.logger,
                 )
+
+                # 6. Process remaining raw paths
                 content = await process_raw_media_paths(
                     content, self, token, chat_id, self.logger,
                 )
             except Exception:
                 self.logger.exception("media pipeline error, continuing with original content")
 
-        # Send markdown
+        # --- 1. Streaming delta: accumulate + push to card ---
+        if card_id and metadata.get("_stream_delta"):
+            if chat_id not in self._streaming_buffers:
+                self._streaming_buffers[chat_id] = ""
+            self._streaming_buffers[chat_id] += msg.content or ""
+            accumulated = self._streaming_buffers[chat_id]
+            if self._card_manager:
+                try:
+                    await self._card_manager.stream_content(card_id, accumulated)
+                except Exception:
+                    self.logger.debug("[STREAM] stream_content error", exc_info=True)
+            return
+
+        # --- 2. Streaming end: finalize card ---
+        if card_id and metadata.get("_stream_end"):
+            if metadata.get("_resuming"):
+                return  # tool call — more to come
+            self._pending_cards.pop(chat_id, None)
+            accumulated = self._streaming_buffers.pop(chat_id, "") or (msg.content or "")
+            if accumulated.strip() and self._card_manager:
+                try:
+                    await self._card_manager.stream_content(card_id, accumulated)
+                    await self._card_manager.finish_streaming(card_id, accumulated)
+                    self._mark_chat_streamed(chat_id)
+                except Exception:
+                    self.logger.warning("[STREAM] finish failed, falling back to markdown", exc_info=True)
+            else:
+                # No content — just finish
+                if self._card_manager:
+                    try:
+                        await self._card_manager.finish_streaming(card_id, accumulated)
+                    except Exception:
+                        pass
+                self._mark_chat_streamed(chat_id)
+            if chat_id in self._streamed_chats:
+                return
+
+        # --- 3. Progress / status messages: silently skip ---
+        if metadata.get("_progress") or metadata.get("_retry_wait"):
+            self.logger.debug(
+                "[SKIP] Skipping progress/status message for chat={}", chat_id,
+            )
+            return
+
+        # --- 4. Non-streaming: pop and finalize ---
+        popped_id = self._pending_cards.pop(chat_id, None) if self._pending_cards else None
+        if popped_id and self._card_manager and content and content.strip():
+            # If this message carries media refs, it's a tool-driven file/attachment
+            # delivery.  Don't consume the AI Card — keep it pending.
+            if msg.media:
+                self._pending_cards[chat_id] = popped_id  # restore card
+                await self._send_msg_media_refs(token, chat_id, msg.media)
+                return
+
+            self.logger.debug("[CARD] Finalizing card {} for chat={}", popped_id, chat_id)
+            ok = await self._card_manager.finalize_card(popped_id, content.strip())
+            if ok:
+                await self._send_msg_media_refs(token, chat_id, msg.media or [])
+                return
+            self.logger.warning("[CARD] finalize_card failed, falling back to markdown")
+
+        # Skip markdown if streaming already delivered via card
+        if chat_id in self._streamed_chats:
+            self._streamed_chats.pop(chat_id, None)
+            await self._send_msg_media_refs(token, chat_id, msg.media or [])
+            return
+
+        # Fall back to markdown
         if content and content.strip():
             self.logger.info("[SEND] Markdown to chat={} ({} chars)", chat_id, len(content))
             await self._send_markdown_text(token, chat_id, content.strip())
 
         await self._send_msg_media_refs(token, chat_id, msg.media or [])
+
+    # ------------------------------------------------------------------
+    # Streaming chat tracking (bounded LRU via OrderedDict)
+    # ------------------------------------------------------------------
+
+    def _mark_chat_streamed(self, chat_id: str) -> None:
+        """Record a chat as having completed AI Card streaming, with LRU eviction."""
+        self._streamed_chats[chat_id] = True
+        self._streamed_chats.move_to_end(chat_id)
+        while len(self._streamed_chats) > self._STREAMED_CHAT_MAX:
+            self._streamed_chats.popitem(last=False)
 
 
 __all__ = ["DingTalkSender"]

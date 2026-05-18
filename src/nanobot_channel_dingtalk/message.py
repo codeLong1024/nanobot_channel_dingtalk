@@ -17,6 +17,7 @@ from .auth import (
     CallbackMessage,
     DINGTALK_AVAILABLE,
 )
+from .card_manager import CardManager
 from .emotion_handler import (
     add_thinking_emoji,
     recall_thinking_emoji,
@@ -312,8 +313,10 @@ class NanobotDingTalkHandler(ChatbotHandler):
 
         Flow:
         1. Add 🤔 thinking emoji
-        2. Forward to agent — response sent via markdown
-        3. On error: log and skip
+        2. Create AI Card (if available)
+        3. Start streaming (INPUTING status — shows "思考中...")
+        4. Forward to agent — streaming deltas go to card via sender
+        5. On error: fail_card
         """
         robot_code = self.channel._get_robot_code()
         msg_id = parsed.msg_id
@@ -340,8 +343,46 @@ class NanobotDingTalkHandler(ChatbotHandler):
                 http, token, robot_code, msg_id, open_conv_id,
             )
 
+        # Step 2: Create AI Card + Step 3: Start streaming
+        card_instance_id: str | None = None
+        card_setup_ok = False
+        card_manager = self.channel.card_manager
+        if card_manager and http and token:
+            try:
+                is_group = parsed.conversation_type == "2"
+                target = (
+                    {"openConversationId": open_conv_id}
+                    if is_group
+                    else {"receiverUserId": parsed.sender_id}
+                )
+
+                track_id = CardManager.generate_track_id()
+                cid = await card_manager.create_card(
+                    card_instance_id=track_id,
+                    robot_code=robot_code,
+                    target=target,
+                )
+                card_instance_id = cid
+                self.channel._pending_cards[parsed.chat_id] = cid
+                self.channel.logger.info(
+                    "[CARD] Created AI Card {} for chat={}", cid, parsed.chat_id,
+                )
+
+                # Start streaming — card shows "思考中..." initially
+                await card_manager.start_streaming(cid, "思考中...")
+                card_setup_ok = True
+
+            except Exception as e:
+                self.channel.logger.warning(
+                    "[CARD] AI Card setup failed: {}", e,
+                )
+                self.channel.logger.debug("[CARD] Setup traceback", exc_info=True)
+
+        # Signal to channel._on_message whether to enable streaming (per-chat)
+        self.channel._card_enabled[parsed.chat_id] = card_setup_ok
+
         try:
-            # Step 2: Forward to agent — response sent as markdown
+            # Step 4: Forward to agent — streaming output handled by sender
             async with self.channel.rate_limiter:
                 await self.channel._on_message(
                     parsed.content,
@@ -359,12 +400,20 @@ class NanobotDingTalkHandler(ChatbotHandler):
             self.channel.logger.exception(
                 "[ERROR] Processing message failed: {}", e,
             )
+            if card_manager and card_instance_id:
+                try:
+                    await card_manager.fail_card(card_instance_id, str(e))
+                except Exception:
+                    pass
         finally:
-            # Step 3: Recall 🤔 thinking emoji
+            # Step 5: Recall 🤔 thinking emoji
             if http and token:
                 await recall_thinking_emoji(
                     http, token, robot_code, msg_id, open_conv_id,
                 )
+
+            # Clean up per-chat card_enabled flag
+            self.channel._card_enabled.pop(parsed.chat_id, None)
 
 
 __all__ = ["NanobotDingTalkHandler", "ParsedMessage"]

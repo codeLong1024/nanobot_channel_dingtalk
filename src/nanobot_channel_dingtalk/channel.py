@@ -26,6 +26,8 @@ from .auth import (
     Credential,
     DingTalkStreamClient,
 )
+from .card_client import DingTalkCardClient
+from .card_manager import CardManager
 from .config import VALID_LOG_LEVELS, DingTalkConfig
 from .message import NanobotDingTalkHandler
 from .rate_limiter import RateLimiter
@@ -64,12 +66,24 @@ class DingTalkChannel(BaseChannel):
         self._client: Any = None
         self._http: httpx.AsyncClient | None = None
 
+        self._background_tasks: set[asyncio.Task] = set()
+
         # Rate limiter
         self.rate_limiter = RateLimiter(max_qps=20)
+
+        # Card manager + card client (lazy — init in start())
+        self.card_client: DingTalkCardClient | None = None
+        self.card_manager: CardManager | None = None
+
+        # Pending cards per chat_id — used by sender to update cards
+        self._pending_cards: dict[str, str] = {}
+        # Whether AI Card was successfully created per-chat
+        self._card_enabled: dict[str, bool] = {}
 
         # Sender
         self.sender = DingTalkSender(
             config, self.logger,
+            pending_cards=self._pending_cards,
         )
 
     def _apply_log_level(self) -> None:
@@ -124,8 +138,15 @@ class DingTalkChannel(BaseChannel):
         else:
             self._http = httpx.AsyncClient()
 
-        # Wire up sender with http client
-        self.sender.setup(self._http)
+        # Initialize card client + card manager
+        self.card_client = DingTalkCardClient(
+            access_token_fn=self.sender.get_access_token,
+            proxy_url=self.config.proxy_url,
+        )
+        self.card_manager = CardManager(self.card_client)
+
+        # Wire up sender with http client and card manager
+        self.sender.setup(self._http, self.card_manager)
 
         self.logger.info(
             "Initializing Stream Client with Client ID: {}...",
@@ -153,11 +174,16 @@ class DingTalkChannel(BaseChannel):
     async def stop(self) -> None:
         """Stop the DingTalk bot."""
         self._running = False
+        if self.card_client:
+            await self.card_client.close()
         if self._http:
             await self._http.aclose()
             self._http = None
         if self.sender:
             await self.sender.close()
+        for task in self._background_tasks:
+            task.cancel()
+        self._background_tasks.clear()
 
     async def send(self, msg: OutboundMessage) -> None:
         """Send a message through DingTalk."""
@@ -189,7 +215,7 @@ class DingTalkChannel(BaseChannel):
         chat_id: str,
         media: list[str] | None = None,
     ) -> None:
-        """Handle incoming message."""
+        """Handle incoming message — enables streaming for AI Card flow."""
         try:
             self.logger.info("inbound: {} from {}", content, sender_name)
 
@@ -199,6 +225,10 @@ class DingTalkChannel(BaseChannel):
                 "platform": "dingtalk",
                 "conversation_type": "2" if is_group_session(chat_id) else "1",
             }
+
+            # Only enable streaming when AI Card was successfully created (per-chat lookup)
+            if self._card_enabled.get(chat_id, False):
+                metadata["_wants_stream"] = True
 
             await self._handle_message(
                 sender_id=sender_id,

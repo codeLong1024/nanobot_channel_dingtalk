@@ -8,7 +8,7 @@
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![CI](https://github.com/codeLong1024/nanobot_channel_dingtalk/workflows/CI/badge.svg)](https://github.com/codeLong1024/nanobot_channel_dingtalk/actions)
 
-**钉钉 Nano 通道插件** — 为 [Nanobot AI Agent Framework](https://github.com/nanobot-ai/nanobot) 提供情绪表情、富媒体等增强能力。
+**钉钉 Nano 通道插件** — 为 [Nanobot AI Agent Framework](https://github.com/nanobot-ai/nanobot) 提供 AI Card 流式输出、情绪表情、富媒体等增强能力。
 
 </div>
 
@@ -18,6 +18,7 @@
 
 | Feature | Description |
 |---------|-------------|
+| **🃏 AI Card Streaming** | Agent streaming output with typing effect via DingTalk AI Card |
 | **😊 Emotion Feedback** | 🤔 thinking emoji on receive → recall on reply complete |
 | **🖼️ Rich Media** | Images, audio, video, files, richText, OCR parsing |
 | **📁 File Parsing** | Auto-parse attached files into LLM context |
@@ -124,21 +125,54 @@ nanobot channels status
 
 ---
 
+## 🃏 AI Card Streaming
+
+Channel 内置 **DingTalk AI Card** 流式输出支持，Agent 生成内容时自动实现打字机效果。
+
+### 数据流
+
+```
+用户消息 → Stream SDK → _handle_message()
+  → 1. 🤔 添加思考表情
+  → 2. CardManager.create_card()（创建 + 投放卡片）
+  → 3. CardManager.start_streaming("思考中...")
+  → 4. Agent 处理
+       ├── 增量 chunk → sender._stream_delta → CardManager.stream_content() → 打字机效果
+       └── 结束 → sender._stream_end → CardManager.finish_streaming()
+  → 5. 失败时 → CardManager.fail_card()
+  → 6. 回收 🤔 思考表情
+```
+
+### 非流式回退
+
+Agent 直接返回完整内容时，自动通过 AI Card 一次性展示；若卡片操作失败，降级为普通 Markdown 消息。
+
+### 错误隔离
+
+- 卡片创建失败 → 降级为普通消息，不堵塞消息处理
+- 流式推送 403 QPS 限流 → 自动重试一次
+- 流式/卡片操作异常 → 降级 Markdown 发送
+
+---
+
 ## 📁 Module Structure
 
 ```
 src/nanobot_channel_dingtalk/
-├── __init__.py              # DingTalkChannel / DingTalkConfig
+├── __init__.py              # DingTalkChannel / DingTalkConfig / CardManager / DingTalkCardClient
 ├── channel.py               # DingTalkChannel(BaseChannel)
 ├── config.py                # Pydantic config model
 ├── auth.py                  # DingTalk Stream SDK wrapper
 ├── token.py                 # TokenManager (OAuth2 token lifecycle)
-├── sender.py                # Message sending orchestrator
-├── message.py               # Message parsing + handling
+├── sender.py                # Message sending orchestrator (5-path: streaming delta/end/progress/card/markdown)
+├── message.py               # Message parsing + handling (AI Card creation + streaming setup)
 ├── emotion_handler.py       # 🤔 thinking / recall emoji
 ├── rate_limiter.py          # 20 QPS rate limiter
 ├── session.py               # Session key utilities
 ├── session_manager.py       # ConversationQueue
+├── models.py                # [NEW] AI Card data models (AICardStatus, AICardInstance)
+├── card_client.py           # [NEW] DingTalk Card API HTTP client (token + error handling)
+├── card_manager.py          # [NEW] AI Card lifecycle manager (create/stream/finish/fail/finalize)
 └── media/                   # Rich media pipeline
     ├── __init__.py
     ├── constants.py         # Regex patterns, extension maps
@@ -169,6 +203,7 @@ python -m pytest tests/ -v
 
 - [Nanobot BaseChannel](https://github.com/nanobot-ai/nanobot) — framework channel interface
 - [DingTalk OpenClaw Connector](https://github.com/DingTalk-Real-AI/dingtalk-openclaw-connector) — official reference for emotion feedback design (MIT)
+- [DingTalk AI Card API](https://open.dingtalk.com/document/orgapp/stream-typing-users-output-content) — interactive card streaming interface
 
 ---
 
