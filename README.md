@@ -2,13 +2,16 @@
 
 # nanobot-channel-dingtalk
 
-**Nano DingTalk Channel Plugin for Nanobot — Rich Media, Emotion Feedback**
+**钉钉 AI Card 流式输出插件 | DingTalk AI Card Streaming Channel for Nanobot AI Agent**
 
 [![Python](https://img.shields.io/badge/python-3.11%2B-blue)](https://python.org)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![CI](https://github.com/codeLong1024/nanobot_channel_dingtalk/workflows/CI/badge.svg)](https://github.com/codeLong1024/nanobot_channel_dingtalk/actions)
 
-**钉钉 Nano 通道插件** — 为 [Nanobot AI Agent Framework](https://github.com/nanobot-ai/nanobot) 提供 AI Card 流式输出、情绪表情、富媒体等增强能力。
+**钉钉 Nano 通道插件** — 为 [Nanobot AI Agent Framework](https://github.com/HKUDS/nanobot) 提供 AI Card 流式输出、情绪表情、富媒体等增强能力。
+
+[![DingTalk](https://img.shields.io/badge/DingTalk-Stream%20SDK-blueviolet)](https://open.dingtalk.com/)
+[![Nanobot](https://img.shields.io/badge/Nanobot-Channel%20Plugin-orange)](https://github.com/HKUDS/nanobot)
 
 </div>
 
@@ -16,14 +19,23 @@
 
 ## ✨ Features
 
+### 核心功能 Core Features
+
 | Feature | Description |
 |---------|-------------|
-| **🃏 AI Card Streaming** | Agent streaming output with typing effect via DingTalk AI Card |
-| **😊 Emotion Feedback** | 🤔 thinking emoji on receive → recall on reply complete |
-| **🖼️ Rich Media** | Images, audio, video, files, richText, OCR parsing |
-| **📁 File Parsing** | Auto-parse attached files into LLM context |
-| **🔒 Rate Limiting** | 20 QPS built-in, compatible with Nanobot's outbound coalescing |
-| **📋 Session Queue** | Per-conversation serial processing with ConversationQueue |
+| **🃏 AI Card Streaming** | Agent streaming output with typing effect via DingTalk AI Card (钉钉 AI 卡片流式输出) |
+| **😊 Emotion Feedback** | 🤔 thinking emoji on receive → recall on reply complete (情绪表情反馈) |
+| **🖼️ Rich Media** | Images, audio, video, files, richText, OCR parsing (富媒体支持) |
+| **📁 File Parsing** | Auto-parse attached files into LLM context (文件自动解析) |
+| **🔒 Rate Limiting** | 20 QPS built-in, compatible with Nanobot's outbound coalescing (速率限制) |
+| **📋 Session Queue** | Per-conversation serial processing with ConversationQueue (会话队列管理) |
+
+### 技术亮点 Technical Highlights
+
+- **打字机效果 Typewriter Effect**: 基于钉钉 AI Card 的增量流式推送，实现自然流畅的输出体验
+- **多状态表情 Multi-Status Emoji**: 支持 🤔思考 → ✍️写作 → ✅完成 的状态切换反馈
+- **错误隔离 Error Isolation**: 卡片操作失败自动降级 Markdown，保障消息不堵塞
+- **智能限流 Smart Rate Limiting**: 内置 20 QPS 限流器，兼容 Nanobot 出站合并机制
 
 ---
 
@@ -206,9 +218,15 @@ python -m pytest tests/ -v
 
 ## 📚 References
 
-- [Nanobot BaseChannel](https://github.com/nanobot-ai/nanobot) — framework channel interface
-- [DingTalk OpenClaw Connector](https://github.com/DingTalk-Real-AI/dingtalk-openclaw-connector) — official reference for emotion feedback design (MIT)
-- [DingTalk AI Card API](https://open.dingtalk.com/document/orgapp/stream-typing-users-output-content) — interactive card streaming interface
+- [Nanobot AI Agent Framework](https://github.com/HKUDS/nanobot) — Lightweight AI Agent Framework with pluggable channel architecture
+- [DingTalk OpenClaw Connector](https://github.com/DingTalk-Real-AI/dingtalk-openclaw-connector) — Official reference for emotion feedback design (MIT)
+- [DingTalk AI Card API](https://open.dingtalk.com/document/orgapp/stream-typing-users-output-content) — Interactive card streaming interface documentation
+- [DingTalk Stream SDK](https://open.dingtalk.com/document/orgapp/stream-mode-configuration) — Stream mode configuration guide
+
+## 🔍 Related Projects
+
+- [Nanobot](https://github.com/HKUDS/nanobot) — Multi-channel AI Agent Framework
+- [DingTalk Open Platform](https://open.dingtalk.com/) — 钉钉开放平台
 
 ---
 
