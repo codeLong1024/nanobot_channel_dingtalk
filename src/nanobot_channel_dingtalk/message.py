@@ -22,6 +22,7 @@ from .emotion_handler import (
     add_thinking_emoji,
     recall_thinking_emoji,
 )
+from .emotion_hook import EmotionContext
 from .media.file_parser import parse_file_content
 from .session_manager import ConversationQueue
 from .session import build_session_key
@@ -343,6 +344,23 @@ class NanobotDingTalkHandler(ChatbotHandler):
                 http, token, robot_code, msg_id, open_conv_id,
             )
 
+        # Store emotion context for multi-state updates during streaming
+        emotion_ctx = EmotionContext(
+            http_client=http,
+            token=token,
+            robot_code=robot_code,
+            open_msg_id=msg_id,
+            open_conversation_id=open_conv_id,
+        ) if http and token else None
+        if emotion_ctx:
+            existing = self.channel._emotion_contexts.get(parsed.chat_id)
+            if existing is not None:
+                self.channel.logger.warning(
+                    "[Emotion] Overwriting existing context for chat={} (old_msg={}, new_msg={})",
+                    parsed.chat_id, existing.open_msg_id, emotion_ctx.open_msg_id,
+                )
+            self.channel._emotion_contexts[parsed.chat_id] = emotion_ctx
+
         # Step 2: Create AI Card + Step 3: Start streaming
         card_instance_id: str | None = None
         card_setup_ok = False
@@ -405,15 +423,16 @@ class NanobotDingTalkHandler(ChatbotHandler):
                     await card_manager.fail_card(card_instance_id, str(e))
                 except Exception:
                     pass
-        finally:
-            # Step 5: Recall 🤔 thinking emoji
+            # On error, recall emoji immediately (sender won't do it)
             if http and token:
                 await recall_thinking_emoji(
                     http, token, robot_code, msg_id, open_conv_id,
                 )
-
-            # Clean up per-chat card_enabled flag
-            self.channel._card_enabled.pop(parsed.chat_id, None)
+        # NOTE: Do NOT clean up _emotion_contexts or _card_enabled here.
+        # The finally block would run after channel._on_message() returns,
+        # but that only enqueues the message — the Agent Loop hasn't
+        # processed it yet.  Cleanup is now done in sender.py when the
+        # stream actually ends (_stream_end event).
 
 
 __all__ = ["NanobotDingTalkHandler", "ParsedMessage"]

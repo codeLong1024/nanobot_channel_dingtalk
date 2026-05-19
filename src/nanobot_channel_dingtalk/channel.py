@@ -29,6 +29,7 @@ from .auth import (
 from .card_client import DingTalkCardClient
 from .card_manager import CardManager
 from .config import VALID_LOG_LEVELS, DingTalkConfig
+from .emotion_hook import EmotionContext
 from .message import NanobotDingTalkHandler
 from .rate_limiter import RateLimiter
 from .sender import DingTalkSender
@@ -79,11 +80,14 @@ class DingTalkChannel(BaseChannel):
         self._pending_cards: dict[str, str] = {}
         # Whether AI Card was successfully created per-chat
         self._card_enabled: dict[str, bool] = {}
+        # Emotion contexts per chat_id — used by sender to drive multi-status emoji
+        self._emotion_contexts: dict[str, EmotionContext] = {}
 
         # Sender
         self.sender = DingTalkSender(
             config, self.logger,
             pending_cards=self._pending_cards,
+            emotion_contexts=self._emotion_contexts,
         )
 
     def _apply_log_level(self) -> None:
@@ -226,9 +230,9 @@ class DingTalkChannel(BaseChannel):
                 "conversation_type": "2" if is_group_session(chat_id) else "1",
             }
 
-            # Only enable streaming when AI Card was successfully created (per-chat lookup)
-            if self._card_enabled.get(chat_id, False):
-                metadata["_wants_stream"] = True
+            # Always enable streaming (DingTalkChannel implements send_delta)
+            # The actual card update will fallback gracefully if card creation failed.
+            metadata["_wants_stream"] = True
 
             await self._handle_message(
                 sender_id=sender_id,
@@ -253,10 +257,5 @@ class DingTalkChannel(BaseChannel):
             if client_robot:
                 return client_robot
         return self.config.client_id
-
-    async def _get_token_and_robot(self) -> tuple[str | None, str]:
-        token = await self.sender.get_access_token()
-        return token, self._get_robot_code()
-
 
 __all__ = ["DingTalkChannel", "DingTalkConfig", "build_session_key"]

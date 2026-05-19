@@ -20,6 +20,8 @@ class DingTalkConfig(Base):
     client_secret: str = ""
     log_level: str = "INFO"
     """通道日志级别：DEBUG / INFO / WARNING / ERROR。设为 DEBUG 可查看 HTTP 请求、流式增量等详细信息。"""
+    streaming: bool = True
+    """启用流式输出支持（AI Card 流式更新）。设为 False 可强制使用非流式模式。"""
     allow_from: list[str] = Field(default_factory=list)
     allow_remote_media_redirects: bool = False
     remote_media_redirect_allowed_hosts: list[str] = Field(default_factory=list)

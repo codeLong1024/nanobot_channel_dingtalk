@@ -58,3 +58,7 @@ htmlcov/
 .mypy_cache/
 .dmypy.json
 dmypy.json
+
+# Local / generated
+.rca/
+.codebuddy/

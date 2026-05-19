@@ -10,6 +10,8 @@ from __future__ import annotations
 import asyncio
 from typing import Any, Awaitable, Callable
 
+from loguru import logger
+
 
 class ConversationQueue:
     """Per-conversation serial message queue.
@@ -63,9 +65,10 @@ class ConversationQueue:
 
                 try:
                     await handler(message)
-                except Exception:
-                    # Handler exceptions must not break the worker loop
-                    pass
+                except Exception as e:
+                    # Handler exceptions must not break the worker loop,
+                    # but we log them for debugging.
+                    logger.exception("[Queue] Handler error: {}", e)
                 finally:
                     queue.task_done()
         finally:

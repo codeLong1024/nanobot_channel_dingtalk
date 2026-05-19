@@ -38,6 +38,9 @@ from .media.upload import upload_media
 from .session import is_group_session, parse_group_session
 from .token import TokenManager
 
+from .emotion_handler import recall_thinking_emoji as _recall_thinking_emoji
+from .emotion_hook import DingTalkEmotionHook, EmotionContext
+
 
 class DingTalkSender:
     """Handles sending messages and media via DingTalk API.
@@ -66,12 +69,14 @@ class DingTalkSender:
         card_manager: Any = None,
         pending_cards: dict[str, str] | None = None,
         token_provider: Callable[[], Awaitable[str | None]] | None = None,
+        emotion_contexts: dict[str, EmotionContext] | None = None,
     ):
         self.config = config
         self.logger = logger
         self._http = http_client
         self._card_manager = card_manager
         self._pending_cards = pending_cards if pending_cards is not None else {}
+        self._emotion_contexts = emotion_contexts if emotion_contexts is not None else {}
         self._token_manager = TokenManager(
             client_id=config.client_id,
             client_secret=config.client_secret,
@@ -390,7 +395,15 @@ class DingTalkSender:
         if card_id and metadata.get("_stream_delta"):
             if chat_id not in self._streaming_buffers:
                 self._streaming_buffers[chat_id] = ""
-            self._streaming_buffers[chat_id] += msg.content or ""
+                # First stream delta → ✍️ 输出中
+                await self._trigger_emotion(chat_id, "writing")
+            # Cap per-chat buffer at 100 KB to prevent unbounded growth
+            prev = self._streaming_buffers[chat_id]
+            delta = msg.content or ""
+            if len(prev) + len(delta) > 100_000:
+                self.logger.warning("[STREAM] Buffer overflow for chat={}, truncating", chat_id)
+                delta = delta[: max(0, 100_000 - len(prev))]
+            self._streaming_buffers[chat_id] = prev + delta
             accumulated = self._streaming_buffers[chat_id]
             if self._card_manager:
                 try:
@@ -402,16 +415,22 @@ class DingTalkSender:
         # --- 2. Streaming end: finalize card ---
         if card_id and metadata.get("_stream_end"):
             if metadata.get("_resuming"):
+                await self._trigger_emotion(chat_id, "tool")  # 🔧 工具调用中
                 return  # tool call — more to come
+            await self._trigger_emotion(chat_id, "done")  # ✅ 已完成
             self._pending_cards.pop(chat_id, None)
             accumulated = self._streaming_buffers.pop(chat_id, "") or (msg.content or "")
             if accumulated.strip() and self._card_manager:
                 try:
                     await self._card_manager.stream_content(card_id, accumulated)
                     await self._card_manager.finish_streaming(card_id, accumulated)
-                    self._mark_chat_streamed(chat_id)
                 except Exception:
                     self.logger.warning("[STREAM] finish failed, falling back to markdown", exc_info=True)
+                    # Fallback: send content as markdown to prevent double-send
+                    if accumulated.strip():
+                        await self._send_markdown_text(token, chat_id, accumulated.strip())
+                    self._cleanup_chat_context(chat_id)
+                    return
             else:
                 # No content — just finish
                 if self._card_manager:
@@ -419,9 +438,9 @@ class DingTalkSender:
                         await self._card_manager.finish_streaming(card_id, accumulated)
                     except Exception:
                         pass
-                self._mark_chat_streamed(chat_id)
-            if chat_id in self._streamed_chats:
-                return
+            self._mark_chat_streamed(chat_id)
+            self._cleanup_chat_context(chat_id)
+            return
 
         # --- 3. Progress / status messages: silently skip ---
         if metadata.get("_progress") or metadata.get("_retry_wait"):
@@ -444,6 +463,7 @@ class DingTalkSender:
             ok = await self._card_manager.finalize_card(popped_id, content.strip())
             if ok:
                 await self._send_msg_media_refs(token, chat_id, msg.media or [])
+                self._cleanup_chat_context(chat_id)
                 return
             self.logger.warning("[CARD] finalize_card failed, falling back to markdown")
 
@@ -459,6 +479,8 @@ class DingTalkSender:
             await self._send_markdown_text(token, chat_id, content.strip())
 
         await self._send_msg_media_refs(token, chat_id, msg.media or [])
+        # Non-streaming fallback: recall initial 🤔 thinking emoji
+        await self._recall_emotion(chat_id)
 
     # ------------------------------------------------------------------
     # Streaming chat tracking (bounded LRU via OrderedDict)
@@ -470,6 +492,53 @@ class DingTalkSender:
         self._streamed_chats.move_to_end(chat_id)
         while len(self._streamed_chats) > self._STREAMED_CHAT_MAX:
             self._streamed_chats.popitem(last=False)
+
+    # ------------------------------------------------------------------
+    # Per-chat context cleanup
+    # ------------------------------------------------------------------
+
+    def _cleanup_chat_context(self, chat_id: str) -> None:
+        """Clean up per-chat state after message processing is complete."""
+        self._emotion_contexts.pop(chat_id, None)
+
+    # ------------------------------------------------------------------
+    # Emotion-driven feedback (multi-status emoji)
+    # ------------------------------------------------------------------
+
+    async def _trigger_emotion(self, chat_id: str, state_name: str) -> None:
+        """Update the DingTalk emotion for *chat_id* to *state_name*.
+
+        Silently skips if no :class:`EmotionContext` exists (e.g. non-card
+        reply path).  Exceptions are logged but never propagated.
+        """
+        ctx = self._emotion_contexts.get(chat_id)
+        if ctx is None:
+            return
+        try:
+            hook = DingTalkEmotionHook(ctx)
+            await hook.update(state_name)
+        except Exception:
+            self.logger.exception(
+                "[Emotion] Failed to update '{}' for chat={}", state_name, chat_id,
+            )
+
+    async def _recall_emotion(self, chat_id: str) -> None:
+        """Force-recall the DingTalk emotion for *chat_id* (non-streaming fallback).
+
+        Used when the message flow ends without ever entering a streaming path,
+        ensuring the initial 🤔 thinking emoji is always cleaned up.
+        """
+        ctx = self._emotion_contexts.get(chat_id)
+        if ctx is None:
+            return
+        try:
+            await _recall_thinking_emoji(
+                ctx.http_client, ctx.token, ctx.robot_code,
+                ctx.open_msg_id, ctx.open_conversation_id,
+            )
+        except Exception:
+            self.logger.exception("[Emotion] recall failed for chat={}", chat_id)
+        self._cleanup_chat_context(chat_id)
 
 
 __all__ = ["DingTalkSender"]
