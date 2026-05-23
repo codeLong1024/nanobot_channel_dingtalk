@@ -8,7 +8,7 @@
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![CI](https://github.com/codeLong1024/nanobot_channel_dingtalk/workflows/CI/badge.svg)](https://github.com/codeLong1024/nanobot_channel_dingtalk/actions)
 [![DingTalk](https://img.shields.io/badge/DingTalk-Stream%20SDK-blueviolet)](https://open.dingtalk.com/)
-[![Nanobot](https://img.shields.io/badge/Nanobot-Channel%20Plugin-orange)](https://github.com/HKUDS/nanobot)
+[![Nanobot](https://img.shields.io/badge/Nanobot-0.2.0%2B-orange)](https://github.com/HKUDS/nanobot)
 
 **Nano DingTalk Channel Plugin** — Provides AI Card streaming output, emotion feedback, rich media and enhanced capabilities for [Nanobot AI Agent Framework](https://github.com/HKUDS/nanobot).
 
@@ -46,6 +46,9 @@
 
 # from source
 pip install git+https://github.com/codeLong1024/nanobot_channel_dingtalk.git
+
+# update from GitHub to latest
+pip install --upgrade git+https://github.com/codeLong1024/nanobot_channel_dingtalk.git
 ```
 
 Verify:

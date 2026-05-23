@@ -8,7 +8,7 @@
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![CI](https://github.com/codeLong1024/nanobot_channel_dingtalk/workflows/CI/badge.svg)](https://github.com/codeLong1024/nanobot_channel_dingtalk/actions)
 [![DingTalk](https://img.shields.io/badge/DingTalk-Stream%20SDK-blueviolet)](https://open.dingtalk.com/)
-[![Nanobot](https://img.shields.io/badge/Nanobot-Channel%20Plugin-orange)](https://github.com/HKUDS/nanobot)
+[![Nanobot](https://img.shields.io/badge/Nanobot-0.2.0%2B-orange)](https://github.com/HKUDS/nanobot)
 
 **钉钉 Nano 通道插件** — 为 [Nanobot AI Agent Framework](https://github.com/HKUDS/nanobot) 提供 AI Card 流式输出、情绪表情、富媒体等增强能力。
 
@@ -46,6 +46,9 @@
 
 # 从源码安装
 pip install git+https://github.com/codeLong1024/nanobot_channel_dingtalk.git
+
+# 从 GitHub 更新到最新版
+pip install --upgrade git+https://github.com/codeLong1024/nanobot_channel_dingtalk.git
 ```
 
 验证安装:
