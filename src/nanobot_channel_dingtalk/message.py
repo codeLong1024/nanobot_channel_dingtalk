@@ -37,6 +37,7 @@ class ParsedMessage:
     conversation_type: str | None
     conversation_id: str | None
     chat_id: str
+    session_key: str
     msg_id: str
     raw_message: CallbackMessage
     media: list[str] = field(default_factory=list)
@@ -85,7 +86,10 @@ class NanobotDingTalkHandler(ChatbotHandler):
                 message.data.get("conversationId")
                 or message.data.get("openConversationId")
             )
-            chat_id = build_session_key(sender_id, conversation_type, conversation_id)
+            # chat_id: pure routing identifier (conversation_id for groups, sender_id for DM)
+            chat_id = conversation_id or sender_id
+            # session_key: full session key for agent loop (includes channel prefix)
+            session_key = build_session_key(sender_id, conversation_type, conversation_id)
             msg_id = (
                 getattr(chatbot_msg, "message_id", "")
                 or message.data.get("messageId", "")
@@ -102,6 +106,7 @@ class NanobotDingTalkHandler(ChatbotHandler):
                 conversation_type=conversation_type,
                 conversation_id=conversation_id,
                 chat_id=chat_id,
+                session_key=session_key,
                 msg_id=msg_id,
                 media=file_paths,
                 raw_message=message,
@@ -363,7 +368,6 @@ class NanobotDingTalkHandler(ChatbotHandler):
 
         # Step 2: Create AI Card + Step 3: Start streaming
         card_instance_id: str | None = None
-        card_setup_ok = False
         card_manager = self.channel.card_manager
         if card_manager and http and token:
             try:
@@ -388,7 +392,6 @@ class NanobotDingTalkHandler(ChatbotHandler):
 
                 # Start streaming — card shows "思考中..." initially
                 await card_manager.start_streaming(cid, "思考中...")
-                card_setup_ok = True
 
             except Exception as e:
                 self.channel.logger.warning(
@@ -396,11 +399,10 @@ class NanobotDingTalkHandler(ChatbotHandler):
                 )
                 self.channel.logger.debug("[CARD] Setup traceback", exc_info=True)
 
-        # Signal to channel._on_message whether to enable streaming (per-chat)
-        self.channel._card_enabled[parsed.chat_id] = card_setup_ok
-
         try:
             # Step 4: Forward to agent — streaming output handled by sender
+            # Determine is_dm: single chat (conversation_type == "1") → DM
+            is_dm = parsed.conversation_type != "2"
             async with self.channel.rate_limiter:
                 await self.channel._on_message(
                     parsed.content,
@@ -408,6 +410,8 @@ class NanobotDingTalkHandler(ChatbotHandler):
                     parsed.sender_name or "Unknown",
                     parsed.chat_id,
                     media=parsed.media,
+                    is_dm=is_dm,
+                    session_key=parsed.session_key,
                 )
 
             self.channel.logger.info(
@@ -428,7 +432,7 @@ class NanobotDingTalkHandler(ChatbotHandler):
                 await recall_thinking_emoji(
                     http, token, robot_code, msg_id, open_conv_id,
                 )
-        # NOTE: Do NOT clean up _emotion_contexts or _card_enabled here.
+        # NOTE: Do NOT clean up _emotion_contexts here.
         # The finally block would run after channel._on_message() returns,
         # but that only enqueues the message — the Agent Loop hasn't
         # processed it yet.  Cleanup is now done in sender.py when the

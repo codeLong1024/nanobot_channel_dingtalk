@@ -36,9 +36,6 @@ class TestChannelInit:
     def test_pending_cards_empty(self, channel):
         assert channel._pending_cards == {}
 
-    def test_card_enabled_empty(self, channel):
-        assert channel._card_enabled == {}
-
     def test_sender_has_pending_cards_ref(self, channel):
         assert channel.sender._pending_cards is channel._pending_cards
 
@@ -47,11 +44,11 @@ class TestChannelInit:
 
 
 class TestChannelOnMessage:
-    """_on_message streaming metadata."""
+    """_on_message streaming metadata and parameter forwarding."""
 
     @pytest.mark.asyncio
-    async def test_wants_stream_when_card_enabled(self, channel):
-        channel._card_enabled["chat_1"] = True
+    async def test_wants_stream_not_set_by_on_message(self, channel):
+        """_wants_stream is now delegated to BaseChannel._handle_message."""
         with patch.object(channel, "_handle_message", AsyncMock()) as mock_handle:
             await channel._on_message(
                 content="hello",
@@ -61,11 +58,58 @@ class TestChannelOnMessage:
                 media=None,
             )
             _, kwargs = mock_handle.call_args
-            assert kwargs["metadata"]["_wants_stream"] is True
+            assert "_wants_stream" not in kwargs["metadata"]
 
     @pytest.mark.asyncio
-    async def test_no_wants_stream_when_card_disabled(self, channel):
-        channel._card_enabled["chat_1"] = False
+    async def test_conversation_type_dm(self, channel):
+        """is_dm=True → conversation_type is '1'."""
+        with patch.object(channel, "_handle_message", AsyncMock()) as mock_handle:
+            await channel._on_message(
+                content="hello",
+                sender_id="user1",
+                sender_name="User",
+                chat_id="user1",
+                media=None,
+                is_dm=True,
+            )
+            _, kwargs = mock_handle.call_args
+            assert kwargs["metadata"]["conversation_type"] == "1"
+
+    @pytest.mark.asyncio
+    async def test_conversation_type_group(self, channel):
+        """is_dm=False → conversation_type is '2'."""
+        with patch.object(channel, "_handle_message", AsyncMock()) as mock_handle:
+            await channel._on_message(
+                content="hello",
+                sender_id="user1",
+                sender_name="User",
+                chat_id="conv_123",
+                media=None,
+                is_dm=False,
+            )
+            _, kwargs = mock_handle.call_args
+            assert kwargs["metadata"]["conversation_type"] == "2"
+
+    @pytest.mark.asyncio
+    async def test_is_dm_and_session_key_forwarded(self, channel):
+        """is_dm and session_key are forwarded to _handle_message."""
+        with patch.object(channel, "_handle_message", AsyncMock()) as mock_handle:
+            await channel._on_message(
+                content="hello",
+                sender_id="user1",
+                sender_name="User",
+                chat_id="conv_123",
+                media=None,
+                is_dm=False,
+                session_key="dingtalk:group:user1@conv_123",
+            )
+            _, kwargs = mock_handle.call_args
+            assert kwargs["is_dm"] is False
+            assert kwargs["session_key"] == "dingtalk:group:user1@conv_123"
+
+    @pytest.mark.asyncio
+    async def test_is_dm_and_session_key_defaults(self, channel):
+        """is_dm defaults to False, session_key defaults to None."""
         with patch.object(channel, "_handle_message", AsyncMock()) as mock_handle:
             await channel._on_message(
                 content="hello",
@@ -75,20 +119,8 @@ class TestChannelOnMessage:
                 media=None,
             )
             _, kwargs = mock_handle.call_args
-            assert kwargs["metadata"].get("_wants_stream") is None
-
-    @pytest.mark.asyncio
-    async def test_wants_stream_defaults_false(self, channel):
-        with patch.object(channel, "_handle_message", AsyncMock()) as mock_handle:
-            await channel._on_message(
-                content="hello",
-                sender_id="user1",
-                sender_name="User",
-                chat_id="unknown_chat",
-                media=None,
-            )
-            _, kwargs = mock_handle.call_args
-            assert kwargs["metadata"].get("_wants_stream") is None
+            assert kwargs["is_dm"] is False
+            assert kwargs["session_key"] is None
 
 
 class TestChannelStart:

@@ -33,7 +33,7 @@ from .emotion_hook import EmotionContext
 from .message import NanobotDingTalkHandler
 from .rate_limiter import RateLimiter
 from .sender import DingTalkSender
-from .session import build_session_key, is_group_session
+from .session import build_session_key
 
 
 # Log format matching nanobot framework's CLI style
@@ -78,8 +78,6 @@ class DingTalkChannel(BaseChannel):
 
         # Pending cards per chat_id — used by sender to update cards
         self._pending_cards: dict[str, str] = {}
-        # Whether AI Card was successfully created per-chat
-        self._card_enabled: dict[str, bool] = {}
         # Emotion contexts per chat_id — used by sender to drive multi-status emoji
         self._emotion_contexts: dict[str, EmotionContext] = {}
 
@@ -218,6 +216,8 @@ class DingTalkChannel(BaseChannel):
         sender_name: str,
         chat_id: str,
         media: list[str] | None = None,
+        is_dm: bool = False,
+        session_key: str | None = None,
     ) -> None:
         """Handle incoming message — enables streaming for AI Card flow."""
         try:
@@ -227,12 +227,8 @@ class DingTalkChannel(BaseChannel):
                 "sender_name": sender_name,
                 "channel": "nano_dingtalk",
                 "platform": "dingtalk",
-                "conversation_type": "2" if is_group_session(chat_id) else "1",
+                "conversation_type": "1" if is_dm else "2",
             }
-
-            # Always enable streaming (DingTalkChannel implements send_delta)
-            # The actual card update will fallback gracefully if card creation failed.
-            metadata["_wants_stream"] = True
 
             await self._handle_message(
                 sender_id=sender_id,
@@ -240,6 +236,8 @@ class DingTalkChannel(BaseChannel):
                 content=str(content),
                 media=media,
                 metadata=metadata,
+                is_dm=is_dm,
+                session_key=session_key,
             )
         except Exception:
             self.logger.exception("Error publishing message")
