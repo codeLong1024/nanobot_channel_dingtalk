@@ -90,9 +90,10 @@ async def download_dingtalk_file(
             url_host = download_url.split("/")[2] if "://" in download_url else "?"
 
             # Step 2: Download the file content
+            # Use verify=False because internal DingTalk file servers may have expired/self-signed certs
             timeout = httpx.Timeout(connect_timeout, connect=connect_timeout, read=read_timeout, pool=connect_timeout)
             file_resp = await http.get(
-                download_url, follow_redirects=True, timeout=timeout,
+                download_url, follow_redirects=True, timeout=timeout, verify=False,
             )
             if file_resp.status_code != 200:
                 if logger:
@@ -127,8 +128,8 @@ async def download_dingtalk_file(
             last_error = e
             if logger:
                 logger.warning(
-                    "[{}/{}] ConnectError — check network/proxy settings: host={}",
-                    attempt + 1, 1 + retries, url_host,
+                    "[{}/{}] ConnectError — check network/proxy settings: host={}, error={}",
+                    attempt + 1, 1 + retries, url_host, str(e),
                 )
         except Exception:
             last_error = None  # Non-retryable; log immediately and bail
