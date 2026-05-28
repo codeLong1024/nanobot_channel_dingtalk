@@ -70,8 +70,7 @@ python -c "from nanobot.channels.registry import discover_all; print('nano_dingt
       "client_id": "your-dingtalk-client-id",
       "client_secret": "your-dingtalk-client-secret",
       "streaming": true,
-      "enable_emotion": true,
-      "log_level": "INFO"
+      "enable_emotion": true
     }
   }
 }
@@ -85,7 +84,6 @@ python -c "from nanobot.channels.registry import discover_all; print('nano_dingt
 | `client_id` | string | — | 钉钉机器人 Client ID |
 | `client_secret` | string | — | 钉钉机器人 Client Secret |
 | `streaming` | bool | `true` | 启用 AI Card 流式输出 (打字机效果) |
-| `log_level` | string | `"INFO"` | 通道日志级别: `DEBUG` / `INFO` / `WARNING` / `ERROR` |
 | `enable_emotion` | bool | `true` | 启用多状态表情反馈 (🤔→✍️→✅) |
 | `enable_file_parsing` | bool | `true` | 自动解析文件内容到 LLM |
 | `max_file_parse_chars` | int | `20000` | 文件解析最大字符数 |
@@ -122,12 +120,7 @@ nanobot run -c config.json
 
 ### 调试日志
 
-两种查看调试输出的方式:
-
-1. **全局调试**: `nanobot run -v` (框架级 DEBUG)
-2. **通道级调试** (推荐): 在配置中设置 `"log_level": "DEBUG"`
-   - 仅为 `nanobot_channel_dingtalk` 模块添加独立的 DEBUG 日志
-   - 不会与框架的 INFO+ 处理器重复
+使用 `nanobot run -v` 启动框架级 DEBUG 日志。
 
 ### 查看通道
 

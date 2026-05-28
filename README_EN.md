@@ -70,8 +70,7 @@ python -c "from nanobot.channels.registry import discover_all; print('nano_dingt
       "client_id": "your-dingtalk-client-id",
       "client_secret": "your-dingtalk-client-secret",
       "streaming": true,
-      "enable_emotion": true,
-      "log_level": "INFO"
+      "enable_emotion": true
     }
   }
 }
@@ -85,7 +84,6 @@ python -c "from nanobot.channels.registry import discover_all; print('nano_dingt
 | `client_id` | string | — | DingTalk robot Client ID |
 | `client_secret` | string | — | DingTalk robot Client Secret |
 | `streaming` | bool | `true` | Enable AI Card streaming output (typing effect) |
-| `log_level` | string | `"INFO"` | Per-channel log level: `DEBUG` / `INFO` / `WARNING` / `ERROR` |
 | `enable_emotion` | bool | `true` | Enable multi-status emotion feedback (🤔→✍️→✅) |
 | `enable_file_parsing` | bool | `true` | Auto-parse file content to LLM |
 | `max_file_parse_chars` | int | `20000` | Max chars for file parsing |
@@ -122,12 +120,7 @@ nanobot run -c config.json
 
 ### Debug Logging
 
-Two ways to see debug output:
-
-1. **Global**: `nanobot run -v` (framework-wide DEBUG)
-2. **Per-channel** (recommended): set `"log_level": "DEBUG"` in config
-   - Adds an isolated DEBUG sink for `nanobot_channel_dingtalk` module only
-   - No duplication with the framework's INFO+ handler
+Use `nanobot run -v` to enable framework-wide DEBUG logging.
 
 ### View Channels
 

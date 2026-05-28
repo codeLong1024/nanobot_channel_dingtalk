@@ -21,8 +21,6 @@ import re
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
-import httpx
-
 if TYPE_CHECKING:
     from ..sender import DingTalkSender
 
@@ -36,7 +34,6 @@ from . import constants as C
 
 async def process_video_markers(
     text: str,
-    http: httpx.AsyncClient,
     token: str,
     sender: DingTalkSender,
     chat_id: str,
@@ -198,7 +195,6 @@ async def _send_video_message(
 
 async def process_audio_markers(
     text: str,
-    http: httpx.AsyncClient,
     token: str,
     sender: DingTalkSender,
     chat_id: str,
@@ -379,5 +375,4 @@ __all__ = [
     "process_video_markers",
     "process_audio_markers",
     "upload_and_replace_file_markers",
-    "process_video_markers",
 ]

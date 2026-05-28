@@ -371,12 +371,12 @@ class DingTalkSender:
 
                 # 3. Process video markers
                 content = await process_video_markers(
-                    content, self._http, token, self, chat_id, self.logger,
+                    content, token, self, chat_id, self.logger,
                 )
 
                 # 4. Process audio markers
                 content = await process_audio_markers(
-                    content, self._http, token, self, chat_id, self.logger,
+                    content, token, self, chat_id, self.logger,
                 )
 
                 # 5. Process file markers

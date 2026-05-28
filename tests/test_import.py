@@ -1,8 +1,6 @@
 """Smoke test — verify the plugin can be discovered by the framework."""
 
 import importlib
-import sys
-from pathlib import Path
 
 
 def test_package_import():
@@ -20,7 +18,6 @@ def test_config_defaults():
 
     cfg = DingTalkConfig()
     assert cfg.enabled is False
-    assert cfg.log_level == "INFO"
     assert cfg.client_id == ""
     assert cfg.client_secret == ""
 
@@ -37,21 +34,14 @@ def test_entry_point(monkeypatch):
     assert cls is DingTalkChannel
 
 
-def test_valid_log_levels():
-    """VALID_LOG_LEVELS contains expected values."""
-    from nanobot_channel_dingtalk.config import VALID_LOG_LEVELS
-
-    assert VALID_LOG_LEVELS == {"DEBUG", "INFO", "WARNING", "ERROR"}
-
-
 def test_media_subpackage():
     """media subpackage imports cleanly."""
     from nanobot_channel_dingtalk.media import (
-        IMAGE_EXTENSIONS,
+        IMAGE_EXTS,
         TEXT_FILE_EXTENSIONS,
         MEDIA_MSG_TYPES,
     )
 
-    assert isinstance(IMAGE_EXTENSIONS, (set, frozenset))
+    assert isinstance(IMAGE_EXTS, (set, frozenset))
     assert isinstance(TEXT_FILE_EXTENSIONS, (set, frozenset))
     assert isinstance(MEDIA_MSG_TYPES, (set, frozenset))

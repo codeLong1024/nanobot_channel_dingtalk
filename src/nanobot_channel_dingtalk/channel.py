@@ -9,13 +9,10 @@ from __future__ import annotations
 import asyncio
 import os
 import random
-import sys
 from collections.abc import Awaitable, Callable
 from typing import Any
 
 import httpx
-
-from loguru import logger as _loguru
 
 from nanobot.bus.events import OutboundMessage
 from nanobot.bus.queue import MessageBus
@@ -28,21 +25,12 @@ from .auth import (
 )
 from .card_client import DingTalkCardClient
 from .card_manager import CardManager
-from .config import VALID_LOG_LEVELS, DingTalkConfig
+from .config import DingTalkConfig
 from .emotion_hook import EmotionContext
 from .message import NanobotDingTalkHandler
 from .rate_limiter import RateLimiter
 from .sender import DingTalkSender
 from .session import build_session_key
-
-
-# Log format matching nanobot framework's CLI style
-_LOG_FORMAT = (
-    "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | "
-    "<level>{level: <5}</level> | "
-    "<cyan>{extra[channel]}</cyan> | "
-    "<level>{message}</level>"
-)
 
 
 class DingTalkChannel(BaseChannel):
@@ -63,7 +51,6 @@ class DingTalkChannel(BaseChannel):
             config = DingTalkConfig.model_validate(config)
         super().__init__(config, bus)
         self.config: DingTalkConfig = config
-        self._apply_log_level()
         self._client: Any = None
         self._http: httpx.AsyncClient | None = None
 
@@ -87,34 +74,6 @@ class DingTalkChannel(BaseChannel):
             pending_cards=self._pending_cards,
             emotion_contexts=self._emotion_contexts,
         )
-
-    def _apply_log_level(self) -> None:
-        """按 config.log_level 为本插件单独添加 DEBUG sink，不影响框架全局级别。
-
-        框架默认 handler 级别为 INFO（除非 -v/--verbose 启动）。
-        此方法新增一个 filter handler，仅捕捉 nanobot_channel_dingtalk 模块的
-        DEBUG 消息，避免与框架 handler 重复输出 INFO+ 消息。
-        """
-        level = self.config.log_level.upper()
-        if level not in VALID_LOG_LEVELS:
-            level = "INFO"
-
-        # 清除上一次的 debug handler
-        if hasattr(self, '_debug_sink_id'):
-            _loguru.remove(self._debug_sink_id)
-            self._debug_sink_id = None
-
-        if level == "DEBUG":
-            self._debug_sink_id = _loguru.add(
-                sys.stderr,
-                format=_LOG_FORMAT,
-                level="DEBUG",
-                filter=lambda r: (
-                    r["name"].startswith("nanobot_channel_dingtalk")
-                    and r["level"].name == "DEBUG"
-                ),
-                colorize=None,
-            )
 
     def set_token_provider(self, provider: Callable[[], Awaitable[str | None]]) -> None:
         """设置共享 Token 提供者（如 DingTalkAPI.get_access_token），

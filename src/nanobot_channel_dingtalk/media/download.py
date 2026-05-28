@@ -1,14 +1,12 @@
 """Inbound media download.
 
 Provides:
-- ``download_image_with_inferred_ext()`` — download with content-type extension inference
 - ``download_dingtalk_file()`` — download file from DingTalk download code
 """
 
 from __future__ import annotations
 
 import asyncio
-import random
 import time
 from pathlib import Path
 from typing import Any, Optional
@@ -16,59 +14,6 @@ from typing import Any, Optional
 import httpx
 
 from nanobot.config.paths import get_media_dir
-
-
-async def download_image_with_inferred_ext(
-    sender: Any,
-    download_url: str,
-    workspace_dir: Path,
-    sender_id: str,
-) -> Optional[str]:
-    """Download an image and infer the file extension from the HTTP
-    ``Content-Type`` header.
-
-    Extension mapping:
-    - ``image/png`` → ``.png``
-    - ``image/gif`` → ``.gif``
-    - ``image/webp`` → ``.webp``
-    - ``image/jpeg`` → ``.jpg`` (default fallback)
-
-    Args:
-        sender: Object providing ``_http`` (DingTalkSender or similar).
-        download_url: The temporary download URL from DingTalk.
-        workspace_dir: Root workspace directory.
-        sender_id: Sender identifier (used for subdirectory naming).
-
-    Returns:
-        Absolute path to the downloaded file, or ``None`` on failure.
-    """
-    timeout = httpx.Timeout(15.0, connect=15.0, read=120.0, pool=15.0)
-    try:
-        resp = await sender._http.get(download_url, follow_redirects=True, timeout=timeout)
-    except Exception:
-        return None
-
-    if resp.status_code != 200:
-        return None
-
-    content_type = resp.headers.get("content-type", "").lower()
-    ext_map = {
-        "image/png": ".png",
-        "image/gif": ".gif",
-        "image/webp": ".webp",
-        "image/jpeg": ".jpg",
-    }
-    ext = ext_map.get(content_type, ".jpg")
-
-    download_dir = Path(workspace_dir) / "media" / "inbound" / sender_id
-    download_dir.mkdir(parents=True, exist_ok=True)
-
-    timestamp = int(time.time() * 1000)
-    rand_suffix = random.randint(10000, 99999)
-    file_path = download_dir / f"openclaw-media-{timestamp}-{rand_suffix}{ext}"
-
-    await asyncio.to_thread(file_path.write_bytes, resp.content)
-    return str(file_path)
 
 
 async def download_dingtalk_file(

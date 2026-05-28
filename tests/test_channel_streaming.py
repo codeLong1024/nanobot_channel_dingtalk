@@ -16,7 +16,6 @@ def channel():
         "enabled": True,
         "client_id": "test_client",
         "client_secret": "test_secret",
-        "log_level": "INFO",
         "enable_marker_processing": True,
     }
     bus = MagicMock()

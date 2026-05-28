@@ -15,7 +15,6 @@ Submodules:
 """
 
 from .constants import (
-    IMAGE_EXTENSIONS,
     TEXT_FILE_EXTENSIONS,
     MEDIA_MSG_TYPES,
     LOCAL_IMAGE_RE,
@@ -36,7 +35,6 @@ from .helpers import (
 )
 
 __all__ = [
-    "IMAGE_EXTENSIONS",
     "IMAGE_EXTS",
     "AUDIO_EXTS",
     "VIDEO_EXTS",

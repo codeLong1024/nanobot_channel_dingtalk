@@ -15,10 +15,8 @@ from .helpers import (
     AUDIO_EXTS,
     VIDEO_EXTS,
     ZIP_BEFORE_UPLOAD_EXTS,
+    guess_upload_type,
 )
-
-# Backward-compatible alias
-IMAGE_EXTENSIONS: set[str] = IMAGE_EXTS
 
 # ============ 可读文本文件扩展名 ============
 TEXT_FILE_EXTENSIONS: set[str] = {
@@ -106,14 +104,10 @@ RAW_FILE_PATH_RE: re.Pattern = re.compile(
 )
 
 
-from .helpers import guess_upload_type  # noqa: F811 — re-export from helpers
-
-
 __all__ = [
     "IMAGE_EXTS",
     "AUDIO_EXTS",
     "VIDEO_EXTS",
-    "IMAGE_EXTENSIONS",
     "ZIP_BEFORE_UPLOAD_EXTS",
     "TEXT_FILE_EXTENSIONS",
     "MEDIA_MSG_TYPES",
