@@ -8,7 +8,7 @@ from __future__ import annotations
 import json as _json
 import time as _time
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Callable
 
 from .auth import (
     AckMessage,
@@ -125,6 +125,39 @@ class NanobotDingTalkHandler(ChatbotHandler):
             return AckMessage.STATUS_OK, "Error"
 
     # ------------------------------------------------------------------
+    # Download error handling
+    # ------------------------------------------------------------------
+
+    async def _send_download_error(
+        self,
+        sender_uid_fn: Callable[[], str],
+        media_type: str,
+        filename: str,
+    ) -> None:
+        """Send download failure error message to user, skip AI processing.
+        
+        Args:
+            sender_uid_fn: Callable returning sender's UID.
+            media_type: Human-readable media type (e.g. "文件", "图片").
+            filename: Name of the failed file.
+        """
+        sender_id = sender_uid_fn()
+        token = await self.channel.sender.get_access_token()
+        if token:
+            error_msg = (
+                f"⚠️ **{media_type}下载失败**\n\n"
+                f"文件名: {filename}\n"
+                f"原因: 无法从钉钉服务器下载文件，请检查网络或联系管理员。"
+            )
+            await self.channel.sender._send_markdown_text(
+                token, sender_id, error_msg,
+            )
+        self.channel.logger.warning(
+            "{} download failed — error sent to user: file={}, sender={}",
+            media_type, filename, sender_id,
+        )
+
+    # ------------------------------------------------------------------
     # Content extraction helpers (split from process for readability)
     # ------------------------------------------------------------------
 
@@ -208,6 +241,9 @@ class NanobotDingTalkHandler(ChatbotHandler):
             if fp:
                 file_paths.append(fp)
                 content = content or "[Image]"
+            else:
+                await self._send_download_error(sender_uid_fn(), "图片", "image.jpg")
+                return "", []  # skip AI processing
         return content, file_paths
 
     async def _handle_audio(
@@ -243,7 +279,11 @@ class NanobotDingTalkHandler(ChatbotHandler):
         sender_uid_fn,
         content: str,
     ) -> tuple[str, list[str]]:
-        """Handle file message type."""
+        """Handle file message type.
+        
+        On download failure: send error message directly to user (skip AI),
+        then return empty content to bypass agent processing.
+        """
         file_paths: list[str] = []
         download_code = (
             message.data.get("content", {}).get("downloadCode")
@@ -261,6 +301,9 @@ class NanobotDingTalkHandler(ChatbotHandler):
             if fp:
                 file_paths.append(fp)
                 content = content or "[File]"
+            else:
+                await self._send_download_error(sender_uid_fn(), "文件", fname)
+                return "", []  # skip AI processing
         return content, file_paths
 
     async def _handle_video(
