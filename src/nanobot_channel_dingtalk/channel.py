@@ -172,6 +172,7 @@ class DingTalkChannel(BaseChannel):
         self,
         content: str,
         sender_id: str,
+        sender_staff_id: str | None,
         sender_name: str,
         chat_id: str,
         media: list[str] | None = None,
@@ -184,6 +185,7 @@ class DingTalkChannel(BaseChannel):
 
             metadata: dict[str, Any] = {
                 "sender_name": sender_name,
+                "sender_staff_id": sender_staff_id,
                 "channel": "nano_dingtalk",
                 "platform": "dingtalk",
                 "conversation_type": "1" if is_dm else "2",
@@ -191,6 +193,7 @@ class DingTalkChannel(BaseChannel):
 
             await self._handle_message(
                 sender_id=sender_id,
+                sender_staff_id=sender_staff_id,
                 chat_id=chat_id,
                 content=str(content),
                 media=media,

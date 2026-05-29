@@ -33,6 +33,7 @@ class ParsedMessage:
     """Lightweight data container for parsed message context."""
     content: str
     sender_id: str
+    sender_staff_id: str | None
     sender_name: str
     conversation_type: str | None
     conversation_id: str | None
@@ -78,7 +79,7 @@ class NanobotDingTalkHandler(ChatbotHandler):
                 )
                 return AckMessage.STATUS_OK, "OK"
 
-            sender_id = chatbot_msg.sender_staff_id or chatbot_msg.sender_id
+            sender_id = chatbot_msg.sender_staff_id or chatbot_msg.sender_id or ""
             sender_name = chatbot_msg.sender_nick or "Unknown"
 
             conversation_type = message.data.get("conversationType")
@@ -102,6 +103,7 @@ class NanobotDingTalkHandler(ChatbotHandler):
             parsed = ParsedMessage(
                 content=content,
                 sender_id=sender_id,
+                sender_staff_id=chatbot_msg.sender_staff_id,
                 sender_name=sender_name,
                 conversation_type=conversation_type,
                 conversation_id=conversation_id,
@@ -450,6 +452,7 @@ class NanobotDingTalkHandler(ChatbotHandler):
                 await self.channel._on_message(
                     parsed.content,
                     parsed.sender_id,
+                    parsed.sender_staff_id,
                     parsed.sender_name or "Unknown",
                     parsed.chat_id,
                     media=parsed.media,
