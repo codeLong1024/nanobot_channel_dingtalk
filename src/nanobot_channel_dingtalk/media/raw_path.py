@@ -96,7 +96,6 @@ async def process_raw_media_paths(
             success = await sender._send_batch_message(
                 token, chat_id, "sampleFile",
                 {"mediaId": media_id, "fileName": filename or p.name, "fileType": media_type},
-                sender_staff_id=getattr(sender, '_current_sender_staff_id', None),
             )
 
         if success:
@@ -133,13 +132,11 @@ async def _send_native_media(
         msg_param = {"mediaId": media_id, "duration": 0}
         return await sender._send_batch_message(
             token, chat_id, "sampleVoice", msg_param,
-            sender_staff_id=getattr(sender, '_current_sender_staff_id', None),
         )
     else:
         msg_param = {"mediaId": media_id, "thumbMediaId": "", "duration": 0}
         return await sender._send_batch_message(
             token, chat_id, "sampleVideo", msg_param,
-            sender_staff_id=getattr(sender, '_current_sender_staff_id', None),
         )
 
 

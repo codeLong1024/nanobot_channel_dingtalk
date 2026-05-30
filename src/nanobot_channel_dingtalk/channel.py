@@ -186,6 +186,7 @@ class DingTalkChannel(BaseChannel):
             metadata: dict[str, Any] = {
                 "sender_name": sender_name,
                 "sender_staff_id": sender_staff_id,
+                "sender_user_id": sender_id,  # unionId，batchSend API 的 userIds 需要传这个
                 "channel": "nano_dingtalk",
                 "platform": "dingtalk",
                 "conversation_type": "1" if is_dm else "2",
