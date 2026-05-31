@@ -87,8 +87,10 @@ class NanobotDingTalkHandler(ChatbotHandler):
                 message.data.get("conversationId")
                 or message.data.get("openConversationId")
             )
-            # chat_id: pure routing identifier (conversation_id for groups, sender_id for DM)
-            chat_id = conversation_id or sender_id
+            # chat_id: pure routing identifier
+            # DM → use sender_id so oToMessages/batchSend routes to correct user
+            # Group → use conversation_id
+            chat_id = conversation_id if conversation_type == "2" else sender_id
             # session_key: full session key for agent loop (includes channel prefix)
             session_key = build_session_key(sender_id, conversation_type, conversation_id)
             msg_id = (

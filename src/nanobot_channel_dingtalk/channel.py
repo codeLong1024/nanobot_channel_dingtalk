@@ -193,7 +193,6 @@ class DingTalkChannel(BaseChannel):
 
             await self._handle_message(
                 sender_id=sender_id,
-                sender_staff_id=sender_staff_id,
                 chat_id=chat_id,
                 content=str(content),
                 media=media,

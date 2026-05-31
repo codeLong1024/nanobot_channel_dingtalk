@@ -266,6 +266,7 @@ class DingTalkSender:
                 chat_id,
                 "sampleImageMsg",
                 {"photoURL": media_ref},
+                sender_staff_id=self._current_sender_staff_id,
             )
             if ok:
                 return True
@@ -303,6 +304,7 @@ class DingTalkSender:
                 chat_id,
                 "sampleImageMsg",
                 {"photoURL": media_id},
+                sender_staff_id=self._current_sender_staff_id,
             )
             if ok:
                 return True
@@ -314,6 +316,7 @@ class DingTalkSender:
             chat_id,
             "sampleFile",
             {"mediaId": media_id, "fileName": filename, "fileType": file_type},
+            sender_staff_id=self._current_sender_staff_id,
         )
 
     async def _send_msg_media_refs(
