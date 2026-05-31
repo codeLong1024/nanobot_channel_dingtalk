@@ -187,6 +187,7 @@ async def _send_video_message(
     }
     return await sender._send_batch_message(
         token, chat_id, "sampleVideo", msg_param,
+        sender_staff_id=getattr(sender, '_current_sender_staff_id', None),
     )
 
 
@@ -296,6 +297,7 @@ async def _send_audio_message(
     }
     return await sender._send_batch_message(
         token, chat_id, "sampleVoice", msg_param,
+        sender_staff_id=getattr(sender, '_current_sender_staff_id', None),
     )
 
 

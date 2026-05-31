@@ -88,8 +88,8 @@ class DingTalkSender:
         # Streaming state per chat_id
         self._streaming_buffers: dict[str, str] = {}  # chat_id → accumulated content
         self._streamed_chats: OrderedDict[str, bool] = OrderedDict()  # LRU, bounded
-        # Current sender_user_id (unionId) for batchSend API (set per-message in send())
-        self._current_sender_user_id: str | None = None
+        # Current sender_staff_id for batchSend API (set per-message in send())
+        self._current_sender_staff_id: str | None = None
 
     def setup(self, http_client: httpx.AsyncClient, card_manager: Any = None) -> None:
         """Configure HTTP client and card manager after construction."""
@@ -180,12 +180,18 @@ class DingTalkSender:
         msg_key: str,
         msg_param: dict[str, Any],
         card_data: dict[str, Any] | None = None,
+        sender_staff_id: str | None = None,
     ) -> bool:
         """Send a batch message (private or group).
 
-        For private chat, ``userIds`` is sourced from
-        ``self._current_sender_user_id`` (set per-message in :meth:`send`),
-        then falls back to ``chat_id``.
+        For ``sampleCardMsg``, the actual card JSON goes in ``card_data.cardJson``
+        and ``msg_param`` should be ``{}``.  For other types (e.g. ``sampleMarkdown``)
+        the content lives in ``msg_param`` and ``card_data`` is unused.
+
+        Args:
+            sender_staff_id: DingTalk staff ID for private chat routing.
+                If provided and not empty, used as ``userIds`` for batchSend API.
+                Falls back to ``chat_id`` if ``None`` or empty.
         """
         headers = {"x-acs-dingtalk-access-token": token}
         if is_group_session(chat_id):
@@ -201,10 +207,11 @@ class DingTalkSender:
                 payload["cardData"] = card_data
         else:
             url = "https://api.dingtalk.com/v1.0/robot/oToMessages/batchSend"
-            uid = self._current_sender_user_id or chat_id
+            # Use sender_staff_id if available, fallback to chat_id
+            user_id = sender_staff_id if sender_staff_id else chat_id
             payload = {
                 "robotCode": self.config.client_id,
-                "userIds": [uid],
+                "userIds": [user_id],
                 "msgKey": msg_key,
                 "msgParam": json.dumps(msg_param, ensure_ascii=False),
             }
@@ -241,6 +248,7 @@ class DingTalkSender:
             chat_id,
             "sampleMarkdown",
             {"text": content, "title": "Nanobot Reply"},
+            sender_staff_id=getattr(self, '_current_sender_staff_id', None),
         )
 
     async def _send_media_ref(self, token: str, chat_id: str, media_ref: str) -> bool:
@@ -355,7 +363,7 @@ class DingTalkSender:
 
         metadata = msg.metadata or {}
         chat_id = msg.chat_id
-        self._current_sender_user_id = metadata.get("sender_user_id") or metadata.get("sender_staff_id")
+        self._current_sender_staff_id = metadata.get("sender_staff_id")
         card_id = self._pending_cards.get(chat_id) if self._pending_cards else None
 
         # ============ Rich media preprocessing pipeline ============

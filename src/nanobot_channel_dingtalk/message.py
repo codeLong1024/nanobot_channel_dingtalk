@@ -79,8 +79,7 @@ class NanobotDingTalkHandler(ChatbotHandler):
                 )
                 return AckMessage.STATUS_OK, "OK"
 
-            # sender_id: unionId 优先，batchSend API 需要完整的 senderId
-            sender_id = chatbot_msg.sender_id or chatbot_msg.sender_staff_id or ""
+            sender_id = chatbot_msg.sender_staff_id or chatbot_msg.sender_id or ""
             sender_name = chatbot_msg.sender_nick or "Unknown"
 
             conversation_type = message.data.get("conversationType")
